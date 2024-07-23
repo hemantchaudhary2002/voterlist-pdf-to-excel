@@ -1,0 +1,109 @@
+import pandas as pd
+import re
+
+# Define the path to the raw text file and output file
+input_file = 'D:/voterlistsample.txt'
+output_file = '23processed_data.xlsx'
+
+def parse_raw_data(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+
+    data = []
+    section_info = None  # Variable to store current section info
+    polling_station_info = None  # Variable to store current polling station info
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Debugging line
+        print(f"Processing line {i}: {line}")
+
+        # Check if the line contains section info
+        section_match = re.search(r'Section No and Name\s*:\s*(.*)', line)
+        if section_match:
+            section_info = section_match.group(1).strip()
+            i += 1
+            continue
+
+        # Check if the line contains polling station info
+        polling_station_match = re.search(r'No\. and Name of Polling Station\s*:\s*(.*)', line)
+        if polling_station_match:
+            polling_station_info = polling_station_match.group(1).strip()
+            i += 1
+            continue
+
+        # Check if the line is a valid serial number followed by a name line
+        if line.isdigit() and i + 2 < len(lines) and ('Name' in lines[i + 2] or 'Name :' in lines[i + 2]):
+            try:
+                sr_no = line
+                voter_id = lines[i + 1].strip()
+
+                # Initialize variables for the fields
+                name = 'Unknown'
+                relation_type = 'Unknown'
+                relation_name = 'Unknown'
+                house_number = 'Unknown'
+                age = 'Unknown'
+                gender = 'Unknown'
+
+                # Collect relevant lines
+                details = []
+                j = i + 2
+                while j < len(lines) and not lines[j].strip().isdigit():
+                    details.append(lines[j].strip())
+                    j += 1
+
+                # Extract data from the collected details
+                for detail in details:
+                    if 'Name' in detail and 'Fathers Name' not in detail and 'Husbands Name' not in detail:
+                        name_match = re.search(r'Name\s*[:]*\s*(.*)', detail)
+                        if name_match:
+                            name = name_match.group(1).strip()
+                    elif 'Fathers Name' in detail or 'Husbands Name' in detail or 'Mothers Name' in detail or 'Other' in detail:
+                        relation_match = re.search(r'(Fathers Name|Husbands Name|Mothers Name|Other)\s*[:]*\s*(.*)', detail)
+                        if relation_match:
+                            relation_type = relation_match.group(1).strip()
+                            relation_name = relation_match.group(2).strip()
+                    elif 'House Number' in detail:
+                        house_number_match = re.search(r'House Number\s*[:]*\s*(.*)', detail)
+                        if house_number_match:
+                            house_number = house_number_match.group(1).strip()
+                    elif 'Age' in detail and 'Gender' in detail:
+                        age_gender_match = re.search(r'Age\s*[:]*\s*(\d+)\s*Gender\s*[:]*\s*(\w+)', detail)
+                        if age_gender_match:
+                            age = age_gender_match.group(1).strip()
+                            gender = age_gender_match.group(2).strip()
+
+                # Append to data list with section info and polling station info
+                data.append([sr_no, voter_id, name, relation_type, relation_name, house_number, age, gender, section_info, polling_station_info])
+                i = j  # Move to the next serial number
+                section_info = None  # Reset section info after processing
+                polling_station_info = None  # Reset polling station info after processing
+            except Exception as e:
+                print(f"Error processing entry starting at line {i}: {e}")
+                i += 1
+        else:
+            i += 1
+
+    return data
+
+# Parse the raw data
+parsed_data = parse_raw_data(input_file)
+
+# Create a DataFrame
+df = pd.DataFrame(parsed_data,
+                  columns=['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name', 'House Number', 'Age',
+                           'Gender', 'Section No Name', 'Polling Station Details'])
+
+# Remove duplicates
+df = df.drop_duplicates()
+
+# Fill forward section information and polling station details
+df['Section No Name'] = df['Section No Name'].ffill()
+df['Polling Station Details'] = df['Polling Station Details'].ffill()
+
+# Save to Excel
+df.to_excel(output_file, index=False)
+
+print("Data extraction complete. File saved to", output_file)
