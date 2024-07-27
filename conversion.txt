@@ -1,109 +1,181 @@
 import pandas as pd
 import re
+import os
 
-# Define the path to the raw text file and output file
-input_file = 'D:/voterlistsample.txt'
-output_file = '23processed_data.xlsx'
+# Define the path to the directory containing the raw text files and the output file
+input_folder = 'D:/voterlist/txt files/'
+output_file = 'Dvoterlist final.xlsx'
 
 def parse_raw_data(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     data = []
-    section_info = None  # Variable to store current section info
-    polling_station_info = None  # Variable to store current polling station info
+    unique_data = set()  # Set for unique page and section combinations
     i = 0
+    current_page_no = "Unknown"
+    current_section_no_and_name = "Unknown"
+    file_name = os.path.basename(file_path)
+
+    # Extract Booth No from the file name
+    booth_no_match = re.search(r'ENG-(\d+)-', file_name)
+    booth_no = booth_no_match.group(1) if booth_no_match else "Unknown"
+
+    # Initialize variables for polling station details
+    polling_station_name = "Unknown"
+    polling_station_address = "Unknown"
+
     while i < len(lines):
         line = lines[i].strip()
 
-        # Debugging line
-        print(f"Processing line {i}: {line}")
+        # Extract Page No from lines like "Text from col1 page 22:"
+        page_no_match = re.search(r'Text from col\d+ page (\d+)', line)
+        if page_no_match:
+            current_page_no = page_no_match.group(1).strip()
 
-        # Check if the line contains section info
-        section_match = re.search(r'Section No and Name\s*:\s*(.*)', line)
-        if section_match:
-            section_info = section_match.group(1).strip()
-            i += 1
-            continue
+        # Extract Section No and Name from lines like "Section No and Name 1-SUMSHI"
+        section_no_and_name_match = re.search(r'Section No and Name\s*(\d+-[A-Za-z]+)', line)
+        if section_no_and_name_match:
+            current_section_no_and_name = section_no_and_name_match.group(1).strip()
+            if current_page_no != "Unknown":
+                unique_data.add((current_page_no, current_section_no_and_name, file_name))
 
-        # Check if the line contains polling station info
-        polling_station_match = re.search(r'No\. and Name of Polling Station\s*:\s*(.*)', line)
-        if polling_station_match:
-            polling_station_info = polling_station_match.group(1).strip()
-            i += 1
-            continue
+        # Check for Polling Station details
+        if "No. and Name of Part :" in line:
+            polling_station_name_match = re.search(r'No\. and Name of Part\s*:\s*(.+)', line)
+            if polling_station_name_match:
+                polling_station_name = polling_station_name_match.group(1).strip()
+
+        if "Name and address of Polling Station :" in line:
+            # Get the next line as the address
+            i += 1  # Move to the next line for the address
+            if i < len(lines):
+                polling_station_address_match = re.search(r'Name and address of Polling Station\s*:\s*(.+)', lines[i])
+                if polling_station_address_match:
+                    polling_station_address = polling_station_address_match.group(1).strip()
 
         # Check if the line is a valid serial number followed by a name line
-        if line.isdigit() and i + 2 < len(lines) and ('Name' in lines[i + 2] or 'Name :' in lines[i + 2]):
-            try:
-                sr_no = line
-                voter_id = lines[i + 1].strip()
+        if line.isdigit():
+            sr_no = line
+            deleted_status = ""
+            if i > 0 and lines[i - 1].strip().lower() in {'e', 's', 'r', 'm', 'q'}:
+                deleted_status = "Deleted"
 
-                # Initialize variables for the fields
-                name = 'Unknown'
-                relation_type = 'Unknown'
-                relation_name = 'Unknown'
-                house_number = 'Unknown'
-                age = 'Unknown'
-                gender = 'Unknown'
-
-                # Collect relevant lines
-                details = []
-                j = i + 2
-                while j < len(lines) and not lines[j].strip().isdigit():
-                    details.append(lines[j].strip())
-                    j += 1
-
-                # Extract data from the collected details
-                for detail in details:
-                    if 'Name' in detail and 'Fathers Name' not in detail and 'Husbands Name' not in detail:
-                        name_match = re.search(r'Name\s*[:]*\s*(.*)', detail)
-                        if name_match:
-                            name = name_match.group(1).strip()
-                    elif 'Fathers Name' in detail or 'Husbands Name' in detail or 'Mothers Name' in detail or 'Other' in detail:
-                        relation_match = re.search(r'(Fathers Name|Husbands Name|Mothers Name|Other)\s*[:]*\s*(.*)', detail)
-                        if relation_match:
-                            relation_type = relation_match.group(1).strip()
-                            relation_name = relation_match.group(2).strip()
-                    elif 'House Number' in detail:
-                        house_number_match = re.search(r'House Number\s*[:]*\s*(.*)', detail)
-                        if house_number_match:
-                            house_number = house_number_match.group(1).strip()
-                    elif 'Age' in detail and 'Gender' in detail:
-                        age_gender_match = re.search(r'Age\s*[:]*\s*(\d+)\s*Gender\s*[:]*\s*(\w+)', detail)
-                        if age_gender_match:
-                            age = age_gender_match.group(1).strip()
-                            gender = age_gender_match.group(2).strip()
-
-                # Append to data list with section info and polling station info
-                data.append([sr_no, voter_id, name, relation_type, relation_name, house_number, age, gender, section_info, polling_station_info])
-                i = j  # Move to the next serial number
-                section_info = None  # Reset section info after processing
-                polling_station_info = None  # Reset polling station info after processing
-            except Exception as e:
-                print(f"Error processing entry starting at line {i}: {e}")
+            while i + 1 < len(lines) and lines[i + 1].strip().isdigit():
                 i += 1
+
+            voter_id = lines[i + 1].strip()
+            name = lines[i + 2].strip()
+
+            # Initialize variables for the fields
+            relation_type = 'Unknown'
+            relation_name = 'Unknown'
+            house_number = 'Unknown'
+            age = 'Unknown'
+            gender = 'Unknown'
+
+            # Collect relevant lines
+            details = []
+            j = i + 3
+            while j < len(lines) and not lines[j].strip().isdigit() and not re.search(r'Text from col\d+ page \d+', lines[j]):
+                details.append(lines[j].strip())
+                j += 1
+
+            # Extract data from the collected details
+            for detail in details:
+                if 'Fathers Name' in detail or 'Husbands Name' in detail or 'Mothers Name' in detail or 'Other' in detail:
+                    relation_match = re.search(r'(Fathers Name|Husbands Name|Mothers Name|Other)\s*[:]*\s*(.*)', detail)
+                    if relation_match:
+                        relation_type = relation_match.group(1).strip()
+                        relation_name = relation_match.group(2).strip()
+                elif 'House Number' in detail:
+                    house_number_match = re.search(r'House Number\s*[:]*\s*(.*)', detail)
+                    if house_number_match:
+                        house_number = house_number_match.group(1).strip()
+                elif 'Age' in detail and 'Gender' in detail:
+                    age_gender_match = re.search(r'Age\s*[:]*\s*(\d+)\s*Gender\s*[:]*\s*(\w+)', detail)
+                    if age_gender_match:
+                        age = age_gender_match.group(1).strip()
+                        gender = age_gender_match.group(2).strip()
+
+            # Append to data list with polling station details and booth number
+            data.append([sr_no, voter_id, name, relation_type, relation_name, house_number, age, gender,
+                         current_page_no, current_section_no_and_name, file_name,
+                         polling_station_name, polling_station_address, deleted_status, booth_no])
+            i = j  # Move to the next serial number
+
+            # Reset polling station details for the next entry
+            polling_station_name = "Unknown"
+            polling_station_address = "Unknown"
         else:
             i += 1
 
-    return data
+    return data, unique_data
 
-# Parse the raw data
-parsed_data = parse_raw_data(input_file)
 
-# Create a DataFrame
-df = pd.DataFrame(parsed_data,
-                  columns=['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name', 'House Number', 'Age',
-                           'Gender', 'Section No Name', 'Polling Station Details'])
+# Initialize an empty list to hold the parsed data from all files
+all_data = []
+all_unique_data = set()  # To hold unique page and section data
+polling_data = []  # List to store polling station details
+
+# Iterate over all text files in the input folder
+for file_name in os.listdir(input_folder):
+    if file_name.endswith('.txt'):
+        file_path = os.path.join(input_folder, file_name)
+        parsed_data, unique_data = parse_raw_data(file_path)
+        all_data.extend(parsed_data)
+        all_unique_data.update(unique_data)
+
+        # Extract polling station details separately
+        with open(file_path, 'r', encoding='utf-8') as file:
+            content = file.read()
+            part_pattern = re.compile(r"No\. and Name of Part\s*:\s*(.*)")
+            station_pattern = re.compile(r"Name and address of Polling Station\s*:\s*(.*)")
+
+            part_match = part_pattern.search(content)
+            station_match = station_pattern.search(content)
+
+            if part_match and station_match:
+                part_name = part_match.group(1).strip()
+                station_address = station_match.group(1).strip()
+                polling_data.append([file_name, part_name, station_address])
+
+# Create DataFrames
+df = pd.DataFrame(all_data, columns=['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name',
+                                     'House Number', 'Age', 'Gender', 'Page No', 'Section No and Name',
+                                     'File Name', 'Polling Station Name', 'Polling Station Address', 'Deleted', 'Booth No'])
+df_unique = pd.DataFrame(all_unique_data, columns=['Page No', 'Section No and Name', 'File Name'])
+df_polling = pd.DataFrame(polling_data, columns=['File Name', 'Polling Station Name', 'Polling Station Address'])
 
 # Remove duplicates
 df = df.drop_duplicates()
+df_unique = df_unique.drop_duplicates()
+df_polling = df_polling.drop_duplicates()
 
-# Fill forward section information and polling station details
-df['Section No Name'] = df['Section No Name'].ffill()
-df['Polling Station Details'] = df['Polling Station Details'].ffill()
+# Fill 'Section No and Name' in 'Voter Data' using VLOOKUP-like functionality (both Page No and File Name)
+df = df.merge(df_unique, on=['Page No', 'File Name'], how='left', suffixes=('', '_from_unique'))
+df['Section No and Name'] = df['Section No and Name_from_unique'].fillna(df['Section No and Name'])
+df = df.drop(columns=['Section No and Name_from_unique'])
 
-# Save to Excel
-df.to_excel(output_file, index=False)
+# Fill 'Polling Station Name' and 'Polling Station Address' using VLOOKUP-like functionality (File Name)
+df = df.merge(df_polling, on='File Name', how='left', suffixes=('', '_from_polling'))
+df['Polling Station Name'] = df['Polling Station Name_from_polling'].fillna(df['Polling Station Name'])
+df['Polling Station Address'] = df['Polling Station Address_from_polling'].fillna(df['Polling Station Address'])
+df = df.drop(columns=['Polling Station Name_from_polling', 'Polling Station Address_from_polling'])
+
+# Define the columns you want to keep in the Final Voterlist sheet
+final_columns = ['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name',
+                 'House Number', 'Age', 'Gender', 'Section No and Name',
+                 'Polling Station Name', 'Polling Station Address', 'Deleted', 'Booth No']
+
+# Create a new DataFrame for the Final Voterlist with selected columns
+df_final_voterlist = df[final_columns]
+
+# Save to Excel with four sheets, including the new Final Voterlist sheet
+with pd.ExcelWriter(output_file) as writer:
+    df.to_excel(writer, sheet_name='Voter Data', index=False)
+    df_unique.to_excel(writer, sheet_name='Unique Page Data', index=False)
+    df_polling.to_excel(writer, sheet_name='Polling Station Details', index=False)
+    df_final_voterlist.to_excel(writer, sheet_name='Final Voterlist', index=False)  # New sheet added
 
 print("Data extraction complete. File saved to", output_file)
