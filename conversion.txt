@@ -54,128 +54,17 @@ def parse_raw_data(file_path):
                 if polling_station_address_match:
                     polling_station_address = polling_station_address_match.group(1).strip()
 
-        # Check if the line is a valid serial number followed by a name line
-        if line.isdigit():
-            sr_no = line
-            deleted_status = ""
-            if i > 0 and lines[i - 1].strip().lower() in {'e', 's', 'r', 'm', 'q'}:
-                deleted_status = "Deleted"
+       ..
+..
+.
+.
+.
+.
+.
+.
 
-            while i + 1 < len(lines) and lines[i + 1].strip().isdigit():
-                i += 1
+.
+.
+.
 
-            voter_id = lines[i + 1].strip()
-            name = lines[i + 2].strip()
-
-            # Initialize variables for the fields
-            relation_type = 'Unknown'
-            relation_name = 'Unknown'
-            house_number = 'Unknown'
-            age = 'Unknown'
-            gender = 'Unknown'
-
-            # Collect relevant lines
-            details = []
-            j = i + 3
-            while j < len(lines) and not lines[j].strip().isdigit() and not re.search(r'Text from col\d+ page \d+', lines[j]):
-                details.append(lines[j].strip())
-                j += 1
-
-            # Extract data from the collected details
-            for detail in details:
-                if 'Fathers Name' in detail or 'Husbands Name' in detail or 'Mothers Name' in detail or 'Other' in detail:
-                    relation_match = re.search(r'(Fathers Name|Husbands Name|Mothers Name|Other)\s*[:]*\s*(.*)', detail)
-                    if relation_match:
-                        relation_type = relation_match.group(1).strip()
-                        relation_name = relation_match.group(2).strip()
-                elif 'House Number' in detail:
-                    house_number_match = re.search(r'House Number\s*[:]*\s*(.*)', detail)
-                    if house_number_match:
-                        house_number = house_number_match.group(1).strip()
-                elif 'Age' in detail and 'Gender' in detail:
-                    age_gender_match = re.search(r'Age\s*[:]*\s*(\d+)\s*Gender\s*[:]*\s*(\w+)', detail)
-                    if age_gender_match:
-                        age = age_gender_match.group(1).strip()
-                        gender = age_gender_match.group(2).strip()
-
-            # Append to data list with polling station details and booth number
-            data.append([sr_no, voter_id, name, relation_type, relation_name, house_number, age, gender,
-                         current_page_no, current_section_no_and_name, file_name,
-                         polling_station_name, polling_station_address, deleted_status, booth_no])
-            i = j  # Move to the next serial number
-
-            # Reset polling station details for the next entry
-            polling_station_name = "Unknown"
-            polling_station_address = "Unknown"
-        else:
-            i += 1
-
-    return data, unique_data
-
-
-# Initialize an empty list to hold the parsed data from all files
-all_data = []
-all_unique_data = set()  # To hold unique page and section data
-polling_data = []  # List to store polling station details
-
-# Iterate over all text files in the input folder
-for file_name in os.listdir(input_folder):
-    if file_name.endswith('.txt'):
-        file_path = os.path.join(input_folder, file_name)
-        parsed_data, unique_data = parse_raw_data(file_path)
-        all_data.extend(parsed_data)
-        all_unique_data.update(unique_data)
-
-        # Extract polling station details separately
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.read()
-            part_pattern = re.compile(r"No\. and Name of Part\s*:\s*(.*)")
-            station_pattern = re.compile(r"Name and address of Polling Station\s*:\s*(.*)")
-
-            part_match = part_pattern.search(content)
-            station_match = station_pattern.search(content)
-
-            if part_match and station_match:
-                part_name = part_match.group(1).strip()
-                station_address = station_match.group(1).strip()
-                polling_data.append([file_name, part_name, station_address])
-
-# Create DataFrames
-df = pd.DataFrame(all_data, columns=['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name',
-                                     'House Number', 'Age', 'Gender', 'Page No', 'Section No and Name',
-                                     'File Name', 'Polling Station Name', 'Polling Station Address', 'Deleted', 'Booth No'])
-df_unique = pd.DataFrame(all_unique_data, columns=['Page No', 'Section No and Name', 'File Name'])
-df_polling = pd.DataFrame(polling_data, columns=['File Name', 'Polling Station Name', 'Polling Station Address'])
-
-# Remove duplicates
-df = df.drop_duplicates()
-df_unique = df_unique.drop_duplicates()
-df_polling = df_polling.drop_duplicates()
-
-# Fill 'Section No and Name' in 'Voter Data' using VLOOKUP-like functionality (both Page No and File Name)
-df = df.merge(df_unique, on=['Page No', 'File Name'], how='left', suffixes=('', '_from_unique'))
-df['Section No and Name'] = df['Section No and Name_from_unique'].fillna(df['Section No and Name'])
-df = df.drop(columns=['Section No and Name_from_unique'])
-
-# Fill 'Polling Station Name' and 'Polling Station Address' using VLOOKUP-like functionality (File Name)
-df = df.merge(df_polling, on='File Name', how='left', suffixes=('', '_from_polling'))
-df['Polling Station Name'] = df['Polling Station Name_from_polling'].fillna(df['Polling Station Name'])
-df['Polling Station Address'] = df['Polling Station Address_from_polling'].fillna(df['Polling Station Address'])
-df = df.drop(columns=['Polling Station Name_from_polling', 'Polling Station Address_from_polling'])
-
-# Define the columns you want to keep in the Final Voterlist sheet
-final_columns = ['Serial No', 'Voter ID', 'Name', 'Relation Type', 'Relation Name',
-                 'House Number', 'Age', 'Gender', 'Section No and Name',
-                 'Polling Station Name', 'Polling Station Address', 'Deleted', 'Booth No']
-
-# Create a new DataFrame for the Final Voterlist with selected columns
-df_final_voterlist = df[final_columns]
-
-# Save to Excel with four sheets, including the new Final Voterlist sheet
-with pd.ExcelWriter(output_file) as writer:
-    df.to_excel(writer, sheet_name='Voter Data', index=False)
-    df_unique.to_excel(writer, sheet_name='Unique Page Data', index=False)
-    df_polling.to_excel(writer, sheet_name='Polling Station Details', index=False)
-    df_final_voterlist.to_excel(writer, sheet_name='Final Voterlist', index=False)  # New sheet added
-
-print("Data extraction complete. File saved to", output_file)
+.
