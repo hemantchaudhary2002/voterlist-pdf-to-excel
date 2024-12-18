@@ -5,8 +5,8 @@ from tqdm import tqdm
 
 # Initialize Textract client with new credentials
 client = boto3.client('textract', region_name='ap-south-1',
-                      aws_access_key_id='AKIAVRUVVHZRIYN4XEWM',
-                      aws_secret_access_key='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')
+                      aws_access_key_id='',
+                      aws_secret_access_key='')
 
 def extract_text_from_image(image_path):
     with open(image_path, 'rb') as image:
@@ -21,51 +21,17 @@ def extract_text_from_image(image_path):
 
     return text
 
-def pdf_to_images(pdf_path):
-    images = convert_from_path(pdf_path)
-    return images
+..
+..
+.
+.
+.
+.
+.
+.
 
-def process_pdf(pdf_path):
-    images = pdf_to_images(pdf_path)
-    all_text = {'col1': '', 'col2': '', 'col3': ''}
+.
+.
+.
 
-    for i, image in tqdm(enumerate(images), total=len(images), desc="Processing Pages"):
-        image_path = f'page_{i}.png'
-        image.save(image_path, 'PNG')
-
-        # Crop image into three columns
-        width, height = image.size
-        col_width = width // 3
-        col1_image = image.crop((0, 0, col_width, height))
-        col2_image = image.crop((col_width, 0, col_width * 2, height))
-        col3_image = image.crop((col_width * 2, 0, width, height))
-
-        for col, col_image in zip(['col1', 'col2', 'col3'], [col1_image, col2_image, col3_image]):
-            col_image_path = f'{col}_page_{i}.png'
-            col_image.save(col_image_path, 'PNG')
-            text = extract_text_from_image(col_image_path)
-            all_text[col] += f'Text from {col} page {i}:\n{text}\n'
-            os.remove(col_image_path)
-
-        os.remove(image_path)
-
-    # Save extracted text to a text file
-    txt_file_path = 'extracted_text.txt'
-    with open(txt_file_path, 'w', encoding='utf-8') as file:
-        for col in all_text:
-            file.write(f"Extracted Text for {col}:\n")
-            file.write(all_text[col])
-            file.write('\n' + '-'*30 + '\n')
-
-    print(f"Text saved to {txt_file_path}")
-
-    return all_text
-
-# Example usage
-pdf_path = 'D:/voterlistsample.pdf'
-text = process_pdf(pdf_path)
-
-# Print raw extracted text
-for col in ['col1', 'col2', 'col3']:
-    print(f"Raw Extracted Text for {col}:\n", text[col])
-    print('-----------------------------')
+.
